@@ -13,7 +13,7 @@ services:
   # ═════════════════════════ Infrastructure ══════════════════════════════════
 
   localstack:
-    image: localstack/localstack:3.4
+    image: localstack/localstack:latest
     container_name: docconv-localstack
     ports:
       - "4566:4566"
@@ -49,7 +49,7 @@ services:
       retries: 10
 
   zookeeper:
-    image: confluentinc/cp-zookeeper:7.6.1
+    image: confluentinc/cp-zookeeper:latest
     container_name: docconv-zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
@@ -61,7 +61,7 @@ services:
       retries: 10
 
   kafka:
-    image: confluentinc/cp-kafka:7.6.1
+    image: confluentinc/cp-kafka:latest
     container_name: docconv-kafka
     ports:
       - "9092:9092"
@@ -115,7 +115,7 @@ services:
       retries: 10
 
   temporal-server:
-    image: temporalio/auto-setup:1.24.2
+    image: temporalio/auto-setup:latest
     container_name: docconv-temporal
     ports:
       - "7233:7233"          # gRPC frontend
@@ -139,7 +139,7 @@ services:
       start_period: 40s
 
   temporal-admin-tools:
-    image: temporalio/admin-tools:1.24.2
+    image: temporalio/admin-tools:latest
     container_name: docconv-temporal-admin
     depends_on:
       temporal-server:
