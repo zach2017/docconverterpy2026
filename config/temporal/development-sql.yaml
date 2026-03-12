@@ -1,0 +1,31 @@
+# Temporal dynamic configuration for development (SQL backend).
+# These values override defaults at runtime without restarting the server.
+# See: https://docs.temporal.io/references/dynamic-configuration
+
+system.forceSearchAttributesCacheRefreshOnRead:
+  - value: true
+    constraints: {}
+
+limit.maxIDLength:
+  - value: 255
+    constraints: {}
+
+history.maximumSignalNameLength:
+  - value: 255
+    constraints: {}
+
+frontend.keepAliveMaxConnectionAge:
+  - value: 5m
+    constraints: {}
+
+frontend.keepAliveMaxConnectionAgeGrace:
+  - value: 70s
+    constraints: {}
+
+frontend.enableUpdateWorkflowExecution:
+  - value: true
+    constraints: {}
+
+frontend.enableUpdateWorkflowExecutionAsyncAccepted:
+  - value: true
+    constraints: {}

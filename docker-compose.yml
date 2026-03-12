@@ -13,7 +13,7 @@ services:
   # ═════════════════════════ Infrastructure ══════════════════════════════════
 
   localstack:
-    image: localstack/localstack:latest
+    image: localstack/localstack:3.4
     container_name: docconv-localstack
     ports:
       - "4566:4566"
@@ -49,7 +49,7 @@ services:
       retries: 10
 
   zookeeper:
-    image: confluentinc/cp-zookeeper:latest
+    image: confluentinc/cp-zookeeper:7.6.1
     container_name: docconv-zookeeper
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
@@ -61,7 +61,7 @@ services:
       retries: 10
 
   kafka:
-    image: confluentinc/cp-kafka:latest
+    image: confluentinc/cp-kafka:7.6.1
     container_name: docconv-kafka
     ports:
       - "9092:9092"
@@ -131,6 +131,8 @@ services:
       - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
       - TEMPORAL_ADDRESS=temporal-server:7233
       - TEMPORAL_CLI_ADDRESS=temporal-server:7233
+    volumes:
+      - "./config/temporal/development-sql.yaml:/etc/temporal/config/dynamicconfig/development-sql.yaml:ro"
     healthcheck:
       test: ["CMD", "temporal", "operator", "cluster", "health"]
       interval: 10s
@@ -151,7 +153,7 @@ services:
     tty: true
 
   temporal-ui:
-    image: temporalio/ui:2.26.2
+    image: temporalio/ui:latest
     container_name: docconv-temporal-ui
     ports:
       - "8088:8080"          # Temporal Web UI
