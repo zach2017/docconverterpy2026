@@ -35,6 +35,8 @@ os.environ.setdefault("ENABLE_API", "true")
 os.environ.setdefault("ENABLE_SQS", "false")
 os.environ.setdefault("ENABLE_RABBITMQ", "false")
 os.environ.setdefault("ENABLE_KAFKA", "false")
+os.environ.setdefault("ENABLE_TEMPORAL", "false")
+os.environ.setdefault("USE_TEMPORAL_WORKFLOWS", "false")
 os.environ.setdefault("LOG_LEVEL", "WARNING")
 
 os.makedirs("/tmp/docconv", exist_ok=True)
@@ -508,6 +510,159 @@ def test_models():
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# SECTION 5b – TEMPORAL WORKFLOW TESTS (offline – no server needed)
+# ═════════════════════════════════════════════════════════════════════════════
+
+def test_temporal():
+    """Test Temporal dataclasses, workflow input conversion, and activity logic."""
+    results = {}
+
+    # ── Dataclass serialization ──────────────────────────────────────────
+    try:
+        from app.workflows.dataclasses import (
+            ConversionWorkflowInput, ConversionWorkflowOutput,
+            FetchInput, FetchOutput, ConvertInput, ConvertOutput,
+            UploadInput, UploadOutput, CleanupInput,
+        )
+        inp = ConversionWorkflowInput(
+            job_id="test-temporal-1",
+            document_type="pdf",
+            location_type="s3",
+            s3_bucket="test-bucket",
+            s3_key="test.pdf",
+        )
+        assert inp.job_id == "test-temporal-1"
+        assert inp.document_type == "pdf"
+        assert inp.ftp_port == 21  # default
+        assert inp.auth_type == "none"
+        results["Temporal: dataclass creation"] = {"status": PASS}
+    except Exception as e:
+        results["Temporal: dataclass creation"] = {"status": FAIL, "error": str(e)}
+
+    # ── Workflow input from ConversionJob ─────────────────────────────────
+    try:
+        from app.workflows.client import _job_to_workflow_input
+        from app.models import ConversionJob
+        job = ConversionJob(
+            job_id="wf-test-1",
+            document_type="docx",
+            location_type="url",
+            url="https://example.com/doc.docx",
+            auth_type="bearer",
+            auth_token="tok_abc",
+        )
+        wf_inp = _job_to_workflow_input(job)
+        assert wf_inp.job_id == "wf-test-1"
+        assert wf_inp.document_type == "docx"
+        assert wf_inp.location_type == "url"
+        assert wf_inp.url == "https://example.com/doc.docx"
+        assert wf_inp.auth_type == "bearer"
+        assert wf_inp.auth_token == "tok_abc"
+        results["Temporal: job → workflow input"] = {"status": PASS}
+    except Exception as e:
+        results["Temporal: job → workflow input"] = {"status": FAIL, "error": str(e)}
+
+    # ── Workflow output → ConversionResult ────────────────────────────────
+    try:
+        from app.workflows.client import _workflow_output_to_result
+        from app.workflows.dataclasses import ConversionWorkflowOutput
+        wf_out = ConversionWorkflowOutput(
+            job_id="wf-test-1",
+            success=True,
+            output_bucket="docconv-output",
+            output_key="converted/wf-test-1.txt",
+            total_chars=1234,
+            pages_processed=5,
+            images_extracted=2,
+        )
+        result = _workflow_output_to_result(wf_out)
+        assert result.success is True
+        assert result.output_bucket == "docconv-output"
+        assert result.characters_extracted == 1234
+        assert result.job_id == "wf-test-1"
+        results["Temporal: workflow output → result"] = {"status": PASS}
+    except Exception as e:
+        results["Temporal: workflow output → result"] = {"status": FAIL, "error": str(e)}
+
+    # ── Child workflow registry ───────────────────────────────────────────
+    try:
+        from app.workflows.document_workflows import CHILD_WORKFLOW_MAP, ALL_CHILD_WORKFLOWS
+        # All 10 document types should be mapped
+        expected = {"pdf", "docx", "xlsx", "csv", "pptx", "html", "rtf", "odt", "txt", "image"}
+        assert set(CHILD_WORKFLOW_MAP.keys()) == expected, \
+            f"Missing: {expected - set(CHILD_WORKFLOW_MAP.keys())}"
+        assert len(ALL_CHILD_WORKFLOWS) == 9  # csv shares xlsx workflow
+        results["Temporal: child workflow registry"] = {"status": PASS}
+    except Exception as e:
+        results["Temporal: child workflow registry"] = {"status": FAIL, "error": str(e)}
+
+    # ── Activity registry ────────────────────────────────────────────────
+    try:
+        from app.workflows.activities import ALL_ACTIVITIES
+        assert len(ALL_ACTIVITIES) == 12  # fetch + 9 convert + upload + cleanup
+        # Verify all have temporal activity definitions
+        for act in ALL_ACTIVITIES:
+            assert hasattr(act, "__temporal_activity_definition"), \
+                f"{act.__name__} is not a Temporal activity"
+        results["Temporal: activity registry"] = {"status": PASS}
+    except Exception as e:
+        results["Temporal: activity registry"] = {"status": FAIL, "error": str(e)}
+
+    # ── All workflow classes have definitions ─────────────────────────────
+    try:
+        from app.workflows.worker import ALL_WORKFLOWS
+        assert len(ALL_WORKFLOWS) >= 11  # main + batch + 9 child
+        for wf_cls in ALL_WORKFLOWS:
+            assert hasattr(wf_cls, "__temporal_workflow_definition"), \
+                f"{wf_cls.__name__} is not a Temporal workflow"
+        results["Temporal: workflow class registry"] = {"status": PASS}
+    except Exception as e:
+        results["Temporal: workflow class registry"] = {"status": FAIL, "error": str(e)}
+
+    # ── Direct fallback when Temporal disabled ───────────────────────────
+    try:
+        from config.settings import settings
+        assert settings.enable_temporal is False  # disabled in test env
+        assert settings.use_temporal_workflows is False
+        # process_job should use direct path
+        from app.models import ConversionJob
+        from app.processor import process_job
+        import app.storage as storage_mod
+        import app.processor as processor_mod
+
+        _orig = storage_mod.upload_text_chunks
+        def _mock(text_chunks, bucket=None, key=None, job_id=None):
+            total = 0
+            for chunk in text_chunks:
+                total += len(chunk)
+            return bucket or "b", key or "k", total
+        storage_mod.upload_text_chunks = _mock
+        processor_mod.upload_text_chunks = _mock
+
+        job = ConversionJob(
+            job_id="fallback-test",
+            document_type="txt",
+            location_type="local",
+        )
+        # Create a fresh temp file for this test
+        import shutil
+        tmp = os.path.join("/tmp/docconv", "fallback_test.txt")
+        with open(tmp, "w") as f:
+            f.write("Fallback test content.\nLine two.")
+        r = process_job(job, local_file_path=tmp)
+        assert r.success is True
+        assert r.characters_extracted > 0
+        results["Temporal: direct fallback works"] = {"status": PASS}
+
+        storage_mod.upload_text_chunks = _orig
+        processor_mod.upload_text_chunks = _orig
+    except Exception as e:
+        results["Temporal: direct fallback works"] = {"status": FAIL, "error": str(e)}
+
+    return results
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # SECTION 6 – RUNNER
 # ═════════════════════════════════════════════════════════════════════════════
 
@@ -644,6 +799,24 @@ def main():
         if "error" in info:
             detail = f"  ERROR: {info['error']}"
         print(f"  {status}  {name}{detail}")
+
+    # ── 6b. Temporal tests ───────────────────────────────────────────────
+    print_header("6b. TEMPORAL WORKFLOW TESTS (offline)")
+    temporal_results = test_temporal()
+    for name, info in temporal_results.items():
+        status = info["status"]
+        if "PASS" in status:
+            total_pass += 1
+            all_results.append(("Temporal", name, "PASS", ""))
+        elif "SKIP" in status:
+            total_skip += 1
+            all_results.append(("Temporal", name, "SKIP", ""))
+        else:
+            total_fail += 1
+            all_results.append(("Temporal", name, "FAIL", info.get("error", "")))
+        detail = info.get("error", "")
+        extra = f"  ({detail})" if detail else ""
+        print(f"  {status}  {name}{extra}")
 
     # ── 7. Show converted text previews ──────────────────────────────────
     print_header("7. CONVERTED TEXT PREVIEWS")

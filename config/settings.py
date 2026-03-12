@@ -13,6 +13,16 @@ class Settings(BaseSettings):
     enable_sqs: bool = Field(True, alias="ENABLE_SQS")
     enable_rabbitmq: bool = Field(True, alias="ENABLE_RABBITMQ")
     enable_kafka: bool = Field(True, alias="ENABLE_KAFKA")
+    enable_temporal: bool = Field(True, alias="ENABLE_TEMPORAL")
+    use_temporal_workflows: bool = Field(True, alias="USE_TEMPORAL_WORKFLOWS")
+
+    # ── Temporal ─────────────────────────────────────────────────────────
+    temporal_host: str = Field("localhost:7233", alias="TEMPORAL_HOST")
+    temporal_namespace: str = Field("default", alias="TEMPORAL_NAMESPACE")
+    temporal_task_queue: str = Field("docconv-tasks", alias="TEMPORAL_TASK_QUEUE")
+    temporal_workflow_timeout: int = Field(3600, alias="TEMPORAL_WORKFLOW_TIMEOUT")
+    temporal_activity_timeout: int = Field(600, alias="TEMPORAL_ACTIVITY_TIMEOUT")
+    temporal_retry_max_attempts: int = Field(3, alias="TEMPORAL_RETRY_MAX_ATTEMPTS")
 
     # ── SQS ──────────────────────────────────────────────────────────────
     sqs_endpoint_url: str = Field("http://localhost:4566", alias="SQS_ENDPOINT_URL")

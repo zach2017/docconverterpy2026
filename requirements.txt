@@ -31,3 +31,6 @@ ftplib-enhanced==0.0.0;python_version<"0"   # stdlib ftplib is used directly
 # ── Utilities ──
 pydantic==2.7.4
 pydantic-settings==2.3.4
+
+# ── Temporal.io ──
+temporalio==1.7.1

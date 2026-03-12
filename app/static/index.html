@@ -1,0 +1,933 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocConv – API Test Console</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0c0e14;
+    --surface: #141820;
+    --surface2: #1a1f2b;
+    --border: #252b3a;
+    --border-hl: #3d4663;
+    --text: #c8cdd8;
+    --text-dim: #6b7394;
+    --text-bright: #e8ecf4;
+    --accent: #60a5fa;
+    --accent-glow: rgba(96, 165, 250, .15);
+    --green: #34d399;
+    --green-bg: rgba(52, 211, 153, .08);
+    --red: #f87171;
+    --red-bg: rgba(248, 113, 113, .08);
+    --yellow: #fbbf24;
+    --yellow-bg: rgba(251, 191, 36, .08);
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'DM Sans', system-ui, sans-serif;
+    --radius: 10px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── Layout ───────────────────────────────────── */
+  .shell {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 32px 24px;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 40px;
+    padding-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  header .logo {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, var(--accent), #818cf8);
+    border-radius: 12px;
+    display: grid; place-items: center;
+    font-family: var(--mono); font-weight: 700; font-size: 18px;
+    color: #0c0e14;
+  }
+
+  header h1 {
+    font-size: 22px; font-weight: 700; color: var(--text-bright);
+    letter-spacing: -0.3px;
+  }
+
+  header .tag {
+    font-family: var(--mono); font-size: 11px; color: var(--text-dim);
+    background: var(--surface2); padding: 3px 10px; border-radius: 20px;
+    border: 1px solid var(--border);
+  }
+
+  .status-bar {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--text-dim);
+    transition: background .3s;
+  }
+  .status-dot.ok { background: var(--green); box-shadow: 0 0 8px rgba(52,211,153,.5); }
+  .status-dot.err { background: var(--red); box-shadow: 0 0 8px rgba(248,113,113,.5); }
+
+  .status-label {
+    font-family: var(--mono); font-size: 12px; color: var(--text-dim);
+  }
+
+  /* ── Config Bar ───────────────────────────────── */
+  .config-bar {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 18px;
+    margin-bottom: 24px; flex-wrap: wrap;
+  }
+
+  .config-bar label {
+    font-size: 12px; font-weight: 600; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: .5px;
+  }
+
+  .config-bar input[type="text"] {
+    flex: 1; min-width: 280px;
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 12px;
+    font-family: var(--mono); font-size: 13px; color: var(--text-bright);
+    outline: none; transition: border-color .2s;
+  }
+  .config-bar input:focus { border-color: var(--accent); }
+
+  .btn {
+    font-family: var(--sans); font-weight: 600; font-size: 13px;
+    border: none; border-radius: 6px; padding: 8px 18px;
+    cursor: pointer; transition: all .2s;
+  }
+
+  .btn-primary {
+    background: var(--accent); color: var(--bg);
+  }
+  .btn-primary:hover { filter: brightness(1.1); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: .5; cursor: not-allowed; transform: none; }
+
+  .btn-ghost {
+    background: transparent; color: var(--text-dim);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { border-color: var(--border-hl); color: var(--text); }
+
+  /* ── Tabs ──────────────────────────────────────── */
+  .tabs {
+    display: flex; gap: 0; margin-bottom: 24px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .tab-btn {
+    font-family: var(--sans); font-size: 14px; font-weight: 500;
+    color: var(--text-dim); background: none; border: none;
+    padding: 12px 24px; cursor: pointer; position: relative;
+    transition: color .2s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--accent); }
+  .tab-btn.active::after {
+    content: ''; position: absolute; bottom: -1px; left: 12px; right: 12px;
+    height: 2px; background: var(--accent); border-radius: 2px 2px 0 0;
+  }
+
+  .tab-method {
+    font-family: var(--mono); font-size: 11px; font-weight: 600;
+    padding: 2px 6px; border-radius: 3px; margin-right: 6px;
+  }
+  .method-get { background: var(--green-bg); color: var(--green); }
+  .method-post { background: rgba(96,165,250,.12); color: var(--accent); }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* ── Cards ─────────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+
+  .card h3 {
+    font-size: 14px; font-weight: 600; color: var(--text-bright);
+    margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  .card h3 .icon { font-size: 16px; }
+
+  /* ── Form elements ────────────────────────────── */
+  .form-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .form-group { display: flex; flex-direction: column; gap: 6px; }
+  .form-group.full { grid-column: 1 / -1; }
+
+  .form-group label {
+    font-size: 12px; font-weight: 600; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: .5px;
+  }
+
+  .form-group select,
+  .form-group input[type="text"],
+  .form-group input[type="number"],
+  .form-group input[type="password"],
+  .form-group textarea {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px 12px;
+    font-family: var(--mono); font-size: 13px; color: var(--text-bright);
+    outline: none; transition: border-color .2s;
+  }
+  .form-group select:focus,
+  .form-group input:focus,
+  .form-group textarea:focus { border-color: var(--accent); }
+
+  .form-group textarea {
+    resize: vertical; min-height: 140px;
+    font-size: 12px;
+  }
+
+  .form-group select { cursor: pointer; }
+
+  /* ── Conditional fields ───────────────────────── */
+  .conditional { display: none; }
+  .conditional.show { display: flex; }
+  .conditional-grid { display: none; }
+  .conditional-grid.show { display: grid; }
+
+  /* ── Drop zone ────────────────────────────────── */
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    padding: 40px 24px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .25s;
+    position: relative;
+  }
+  .drop-zone:hover,
+  .drop-zone.dragover {
+    border-color: var(--accent);
+    background: var(--accent-glow);
+  }
+  .drop-zone input { display: none; }
+  .drop-zone .dz-icon { font-size: 36px; margin-bottom: 8px; }
+  .drop-zone .dz-text { font-size: 14px; color: var(--text-dim); }
+  .drop-zone .dz-text strong { color: var(--accent); }
+  .drop-zone .dz-file {
+    margin-top: 12px; font-family: var(--mono); font-size: 12px;
+    color: var(--green); display: none;
+  }
+  .drop-zone .dz-file.show { display: block; }
+
+  /* ── Action bar ───────────────────────────────── */
+  .action-bar {
+    display: flex; align-items: center; gap: 12px;
+    margin-top: 20px;
+  }
+
+  .spinner {
+    width: 18px; height: 18px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin .6s linear infinite;
+    display: none;
+  }
+  .spinner.show { display: block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Response panel ───────────────────────────── */
+  .response-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-top: 24px;
+    display: none;
+  }
+  .response-panel.show { display: block; }
+
+  .response-header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+
+  .response-status {
+    font-family: var(--mono); font-size: 13px; font-weight: 600;
+    padding: 2px 10px; border-radius: 4px;
+  }
+  .response-status.s2xx { background: var(--green-bg); color: var(--green); }
+  .response-status.s4xx { background: var(--yellow-bg); color: var(--yellow); }
+  .response-status.s5xx { background: var(--red-bg); color: var(--red); }
+
+  .response-time {
+    font-family: var(--mono); font-size: 12px; color: var(--text-dim);
+    margin-left: auto;
+  }
+
+  .response-body {
+    padding: 20px;
+    font-family: var(--mono); font-size: 12px; line-height: 1.7;
+    color: var(--text); white-space: pre-wrap; word-break: break-all;
+    max-height: 460px; overflow-y: auto;
+  }
+
+  /* ── Result cards in response ──────────────────── */
+  .result-summary {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px; margin-bottom: 16px;
+  }
+
+  .result-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px;
+  }
+
+  .result-card .rc-label {
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .8px; color: var(--text-dim); margin-bottom: 4px;
+  }
+
+  .result-card .rc-value {
+    font-family: var(--mono); font-size: 16px; font-weight: 600;
+    color: var(--text-bright);
+  }
+
+  .result-card .rc-value.ok { color: var(--green); }
+  .result-card .rc-value.err { color: var(--red); }
+
+  /* ── JSON Syntax ──────────────────────────────── */
+  .json-key { color: #818cf8; }
+  .json-str { color: #34d399; }
+  .json-num { color: #fbbf24; }
+  .json-bool { color: #f472b6; }
+  .json-null { color: var(--text-dim); font-style: italic; }
+
+  /* ── History log ──────────────────────────────── */
+  .history { margin-top: 32px; }
+  .history h3 {
+    font-size: 13px; font-weight: 600; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: .5px;
+    margin-bottom: 12px;
+  }
+
+  .history-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px;
+    border-left: 2px solid var(--border);
+    font-family: var(--mono); font-size: 12px;
+    transition: background .2s; cursor: pointer;
+  }
+  .history-item:hover { background: var(--surface2); }
+
+  .history-item .hi-method {
+    font-weight: 600; width: 40px; flex-shrink: 0;
+  }
+  .history-item .hi-method.get { color: var(--green); }
+  .history-item .hi-method.post { color: var(--accent); }
+
+  .history-item .hi-path { color: var(--text); flex: 1; }
+
+  .history-item .hi-status { font-weight: 600; }
+  .history-item .hi-status.ok { color: var(--green); }
+  .history-item .hi-status.err { color: var(--red); }
+
+  .history-item .hi-time { color: var(--text-dim); }
+
+  /* ── Message schema section ───────────────────── */
+  .schema-block {
+    background: var(--surface2); border-radius: 8px;
+    padding: 16px 20px; margin-top: 16px;
+    font-family: var(--mono); font-size: 12px; line-height: 1.8;
+    border: 1px solid var(--border); overflow-x: auto;
+  }
+
+  /* ── Responsive ───────────────────────────────── */
+  @media (max-width: 700px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .config-bar { flex-direction: column; align-items: stretch; }
+    .config-bar input[type="text"] { min-width: unset; }
+    .tabs { overflow-x: auto; }
+  }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ── Header ──────────────────────────────────── -->
+  <header>
+    <div class="logo">DC</div>
+    <h1>DocConv API Console</h1>
+    <span class="tag">v1.0</span>
+    <div class="status-bar">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-label" id="statusLabel">Checking…</span>
+    </div>
+  </header>
+
+  <!-- ── Config ──────────────────────────────────── -->
+  <div class="config-bar">
+    <label>Base URL</label>
+    <input type="text" id="baseUrl" value="http://localhost:8080" spellcheck="false">
+    <button class="btn btn-ghost" onclick="checkHealth()">Test Connection</button>
+  </div>
+
+  <!-- ── Tabs ────────────────────────────────────── -->
+  <div class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="health">
+      <span class="tab-method method-get">GET</span>/health
+    </button>
+    <button class="tab-btn" data-tab="upload">
+      <span class="tab-method method-post">POST</span>/convert/upload
+    </button>
+    <button class="tab-btn" data-tab="job">
+      <span class="tab-method method-post">POST</span>/convert/job
+    </button>
+    <button class="tab-btn" data-tab="schema">
+      📋 Message Schema
+    </button>
+  </div>
+
+  <!-- ═══ Tab: Health ════════════════════════════ -->
+  <div class="tab-panel active" id="panel-health">
+    <div class="card">
+      <h3><span class="icon">💚</span> Health Check</h3>
+      <p style="color:var(--text-dim); font-size:14px; margin-bottom:16px;">
+        Returns the service status and which components (API, SQS, RabbitMQ, Kafka) are enabled.
+      </p>
+      <div class="action-bar">
+        <button class="btn btn-primary" onclick="sendHealth()">Send Request</button>
+        <div class="spinner" id="spin-health"></div>
+      </div>
+    </div>
+    <div class="response-panel" id="resp-health"></div>
+  </div>
+
+  <!-- ═══ Tab: Upload ════════════════════════════ -->
+  <div class="tab-panel" id="panel-upload">
+    <div class="card">
+      <h3><span class="icon">📤</span> Upload File for Conversion</h3>
+
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="fileInput" accept=".pdf,.docx,.xlsx,.pptx,.html,.htm,.rtf,.odt,.txt,.csv,.jpg,.jpeg,.png,.tiff,.tif,.bmp,.webp">
+        <div class="dz-icon">📁</div>
+        <div class="dz-text">Drop a file here or <strong>click to browse</strong></div>
+        <div class="dz-file" id="fileName"></div>
+      </div>
+
+      <div class="form-grid" style="margin-top:20px;">
+        <div class="form-group">
+          <label>Document Type</label>
+          <select id="uploadDocType">
+            <option value="pdf">PDF</option>
+            <option value="docx">DOCX (Word)</option>
+            <option value="xlsx">XLSX (Excel)</option>
+            <option value="pptx">PPTX (PowerPoint)</option>
+            <option value="html">HTML</option>
+            <option value="rtf">RTF</option>
+            <option value="odt">ODT (OpenDocument)</option>
+            <option value="txt">TXT (Plain Text)</option>
+            <option value="csv">CSV</option>
+            <option value="image">Image (OCR)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Output S3 Key (optional)</label>
+          <input type="text" id="uploadOutputKey" placeholder="converted/my-output.txt">
+        </div>
+      </div>
+
+      <div class="action-bar">
+        <button class="btn btn-primary" id="btnUpload" onclick="sendUpload()" disabled>Upload &amp; Convert</button>
+        <div class="spinner" id="spin-upload"></div>
+      </div>
+    </div>
+    <div class="response-panel" id="resp-upload"></div>
+  </div>
+
+  <!-- ═══ Tab: Job ═══════════════════════════════ -->
+  <div class="tab-panel" id="panel-job">
+    <div class="card">
+      <h3><span class="icon">📨</span> Submit Conversion Job (Remote Source)</h3>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Document Type</label>
+          <select id="jobDocType">
+            <option value="pdf">PDF</option>
+            <option value="docx">DOCX</option>
+            <option value="xlsx">XLSX</option>
+            <option value="pptx">PPTX</option>
+            <option value="html">HTML</option>
+            <option value="rtf">RTF</option>
+            <option value="odt">ODT</option>
+            <option value="txt">TXT</option>
+            <option value="csv">CSV</option>
+            <option value="image">Image</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Location Type</label>
+          <select id="jobLocType" onchange="updateJobFields()">
+            <option value="s3">S3 Bucket</option>
+            <option value="url">URL (HTTP/HTTPS)</option>
+            <option value="ftp">FTP Server</option>
+          </select>
+        </div>
+
+        <!-- S3 fields -->
+        <div class="form-group conditional show" id="field-s3-bucket">
+          <label>S3 Bucket</label>
+          <input type="text" id="jobS3Bucket" placeholder="docconv-input">
+        </div>
+        <div class="form-group conditional show" id="field-s3-key">
+          <label>S3 Key</label>
+          <input type="text" id="jobS3Key" placeholder="docs/report.pdf">
+        </div>
+        <div class="form-group conditional show" id="field-s3-endpoint">
+          <label>S3 Endpoint URL (optional)</label>
+          <input type="text" id="jobS3Endpoint" placeholder="http://localstack:4566">
+        </div>
+
+        <!-- URL fields -->
+        <div class="form-group conditional full" id="field-url">
+          <label>Document URL</label>
+          <input type="text" id="jobUrl" placeholder="https://example.com/document.pdf">
+        </div>
+
+        <!-- FTP fields -->
+        <div class="form-group conditional" id="field-ftp-host">
+          <label>FTP Host</label>
+          <input type="text" id="jobFtpHost" placeholder="ftp.example.com">
+        </div>
+        <div class="form-group conditional" id="field-ftp-port">
+          <label>FTP Port</label>
+          <input type="number" id="jobFtpPort" value="21">
+        </div>
+        <div class="form-group conditional full" id="field-ftp-path">
+          <label>FTP File Path</label>
+          <input type="text" id="jobFtpPath" placeholder="/documents/file.pdf">
+        </div>
+        <div class="form-group conditional" id="field-ftp-user">
+          <label>FTP Username</label>
+          <input type="text" id="jobFtpUser" placeholder="anonymous">
+        </div>
+        <div class="form-group conditional" id="field-ftp-pass">
+          <label>FTP Password</label>
+          <input type="password" id="jobFtpPass">
+        </div>
+
+        <!-- Auth fields -->
+        <div class="form-group">
+          <label>Auth Type</label>
+          <select id="jobAuthType" onchange="updateAuthFields()">
+            <option value="none">None</option>
+            <option value="basic">Basic (username/password)</option>
+            <option value="bearer">Bearer Token</option>
+          </select>
+        </div>
+        <div class="form-group conditional" id="field-auth-user">
+          <label>Username</label>
+          <input type="text" id="jobAuthUser">
+        </div>
+        <div class="form-group conditional" id="field-auth-pass">
+          <label>Password</label>
+          <input type="password" id="jobAuthPass">
+        </div>
+        <div class="form-group conditional" id="field-auth-token">
+          <label>Bearer Token</label>
+          <input type="text" id="jobAuthToken">
+        </div>
+
+        <!-- Optional -->
+        <div class="form-group">
+          <label>Job ID (optional)</label>
+          <input type="text" id="jobId" placeholder="auto-generated">
+        </div>
+        <div class="form-group">
+          <label>Output S3 Key (optional)</label>
+          <input type="text" id="jobOutputKey" placeholder="converted/output.txt">
+        </div>
+      </div>
+
+      <!-- JSON preview -->
+      <div class="form-group full" style="margin-top:16px;">
+        <label>Request Body Preview</label>
+        <textarea id="jobPreview" readonly></textarea>
+      </div>
+
+      <div class="action-bar">
+        <button class="btn btn-ghost" onclick="buildJobPreview()">Refresh Preview</button>
+        <button class="btn btn-primary" onclick="sendJob()">Send Job</button>
+        <div class="spinner" id="spin-job"></div>
+      </div>
+    </div>
+    <div class="response-panel" id="resp-job"></div>
+  </div>
+
+  <!-- ═══ Tab: Schema ════════════════════════════ -->
+  <div class="tab-panel" id="panel-schema">
+    <div class="card">
+      <h3><span class="icon">📋</span> Message Schema Reference</h3>
+      <p style="color:var(--text-dim); font-size:14px; margin-bottom:8px;">
+        This JSON schema is accepted by every message bus (SQS, RabbitMQ, Kafka) and the REST API.
+      </p>
+      <div class="schema-block" id="schemaBlock"></div>
+    </div>
+
+    <div class="card">
+      <h3><span class="icon">📊</span> Supported Values</h3>
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Document Types</label>
+          <div style="font-family:var(--mono); font-size:13px; line-height:2; color:var(--text);">
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">pdf</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">docx</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">xlsx</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">pptx</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">html</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">rtf</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">odt</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">txt</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">csv</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">image</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Location Types</label>
+          <div style="font-family:var(--mono); font-size:13px; line-height:2; color:var(--text);">
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">s3</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">url</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">ftp</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">local</span>
+            <span style="color:var(--text-dim); font-size:11px; display:block; margin-top:4px;">(local = API upload only)</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Auth Types</label>
+          <div style="font-family:var(--mono); font-size:13px; line-height:2; color:var(--text);">
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">none</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">basic</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">bearer</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">aws_sigv4</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Image Formats (for type "image")</label>
+          <div style="font-family:var(--mono); font-size:13px; line-height:2; color:var(--text);">
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">JPEG</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">PNG</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">TIFF</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">BMP</span>
+            <span style="background:var(--surface2);padding:3px 8px;border-radius:4px;margin:2px;display:inline-block;">WEBP</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── History ─────────────────────────────────── -->
+  <div class="history">
+    <h3>Request History</h3>
+    <div id="historyList" style="color:var(--text-dim); font-size:13px;">No requests yet.</div>
+  </div>
+
+</div>
+
+<script>
+// ─── State ──────────────────────────────────────────────
+const history = [];
+let selectedFile = null;
+
+// ─── DOM helpers ────────────────────────────────────────
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+const baseUrl = () => $('#baseUrl').value.replace(/\/+$/, '');
+
+// ─── Tabs ───────────────────────────────────────────────
+$$('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('.tab-btn').forEach(b => b.classList.remove('active'));
+    $$('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    $(`#panel-${btn.dataset.tab}`).classList.add('active');
+  });
+});
+
+// ─── Drop zone ──────────────────────────────────────────
+const dz = $('#dropZone');
+const fi = $('#fileInput');
+
+dz.addEventListener('click', () => fi.click());
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('dragover');
+  if (e.dataTransfer.files.length) { fi.files = e.dataTransfer.files; handleFile(); }
+});
+fi.addEventListener('change', handleFile);
+
+function handleFile() {
+  selectedFile = fi.files[0] || null;
+  const fn = $('#fileName');
+  if (selectedFile) {
+    fn.textContent = `✓ ${selectedFile.name} (${(selectedFile.size/1024).toFixed(1)} KB)`;
+    fn.classList.add('show');
+    $('#btnUpload').disabled = false;
+    // Auto-detect type
+    autoDetectType(selectedFile.name);
+  } else {
+    fn.classList.remove('show');
+    $('#btnUpload').disabled = true;
+  }
+}
+
+function autoDetectType(name) {
+  const ext = name.split('.').pop().toLowerCase();
+  const map = {
+    pdf:'pdf', docx:'docx', doc:'docx', xlsx:'xlsx', xls:'xlsx',
+    pptx:'pptx', ppt:'pptx', html:'html', htm:'html', rtf:'rtf',
+    odt:'odt', txt:'txt', csv:'csv',
+    jpg:'image', jpeg:'image', png:'image', tiff:'image', tif:'image',
+    bmp:'image', webp:'image'
+  };
+  if (map[ext]) $('#uploadDocType').value = map[ext];
+}
+
+// ─── Conditional fields ─────────────────────────────────
+function updateJobFields() {
+  const loc = $('#jobLocType').value;
+  // Hide all conditionals
+  $$('#panel-job .conditional').forEach(el => el.classList.remove('show'));
+  // Show relevant
+  const show = {
+    s3: ['field-s3-bucket','field-s3-key','field-s3-endpoint'],
+    url: ['field-url'],
+    ftp: ['field-ftp-host','field-ftp-port','field-ftp-path','field-ftp-user','field-ftp-pass'],
+  };
+  (show[loc] || []).forEach(id => $(`#${id}`).classList.add('show'));
+  buildJobPreview();
+}
+
+function updateAuthFields() {
+  const auth = $('#jobAuthType').value;
+  $$('#field-auth-user,#field-auth-pass,#field-auth-token').forEach(el => el.classList.remove('show'));
+  if (auth === 'basic') { $('#field-auth-user').classList.add('show'); $('#field-auth-pass').classList.add('show'); }
+  if (auth === 'bearer') { $('#field-auth-token').classList.add('show'); }
+  buildJobPreview();
+}
+
+function buildJobPreview() {
+  const loc = $('#jobLocType').value;
+  const body = {
+    document_type: $('#jobDocType').value,
+    location_type: loc,
+  };
+  if ($('#jobId').value) body.job_id = $('#jobId').value;
+  if (loc === 's3') {
+    body.s3_bucket = $('#jobS3Bucket').value || undefined;
+    body.s3_key = $('#jobS3Key').value || undefined;
+    if ($('#jobS3Endpoint').value) body.s3_endpoint_url = $('#jobS3Endpoint').value;
+  }
+  if (loc === 'url') { body.url = $('#jobUrl').value || undefined; }
+  if (loc === 'ftp') {
+    body.ftp_host = $('#jobFtpHost').value || undefined;
+    body.ftp_port = parseInt($('#jobFtpPort').value) || 21;
+    body.ftp_path = $('#jobFtpPath').value || undefined;
+    if ($('#jobFtpUser').value) body.ftp_user = $('#jobFtpUser').value;
+    if ($('#jobFtpPass').value) body.ftp_pass = $('#jobFtpPass').value;
+  }
+  const auth = $('#jobAuthType').value;
+  if (auth !== 'none') body.auth_type = auth;
+  if (auth === 'basic') { body.auth_username = $('#jobAuthUser').value; body.auth_password = $('#jobAuthPass').value; }
+  if (auth === 'bearer') { body.auth_token = $('#jobAuthToken').value; }
+  if ($('#jobOutputKey').value) body.output_s3_key = $('#jobOutputKey').value;
+
+  $('#jobPreview').value = JSON.stringify(body, null, 2);
+}
+
+// Attach live preview updates
+$$('#panel-job input, #panel-job select').forEach(el => {
+  el.addEventListener('input', buildJobPreview);
+  el.addEventListener('change', buildJobPreview);
+});
+
+// ─── JSON syntax highlight ──────────────────────────────
+function highlightJSON(obj) {
+  const raw = JSON.stringify(obj, null, 2);
+  return raw
+    .replace(/(".*?")(\s*:\s*)/g, '<span class="json-key">$1</span>$2')
+    .replace(/:\s*(".*?")/g, ': <span class="json-str">$1</span>')
+    .replace(/:\s*(\d+\.?\d*)/g, ': <span class="json-num">$1</span>')
+    .replace(/:\s*(true|false)/g, ': <span class="json-bool">$1</span>')
+    .replace(/:\s*(null)/g, ': <span class="json-null">$1</span>');
+}
+
+// ─── Render response ────────────────────────────────────
+function renderResponse(panelId, status, data, elapsed) {
+  const panel = $(`#${panelId}`);
+  const sClass = status < 300 ? 's2xx' : status < 500 ? 's4xx' : 's5xx';
+  let cards = '';
+  if (data && typeof data === 'object') {
+    const parts = [];
+    if ('success' in data) parts.push(`<div class="result-card"><div class="rc-label">Result</div><div class="rc-value ${data.success?'ok':'err'}">${data.success?'Success':'Failed'}</div></div>`);
+    if (data.characters_extracted != null) parts.push(`<div class="result-card"><div class="rc-label">Characters</div><div class="rc-value">${data.characters_extracted.toLocaleString()}</div></div>`);
+    if (data.output_bucket) parts.push(`<div class="result-card"><div class="rc-label">S3 Bucket</div><div class="rc-value" style="font-size:13px">${data.output_bucket}</div></div>`);
+    if (data.output_key) parts.push(`<div class="result-card"><div class="rc-label">S3 Key</div><div class="rc-value" style="font-size:13px">${data.output_key}</div></div>`);
+    if (data.error) parts.push(`<div class="result-card" style="grid-column:1/-1;border-color:var(--red)"><div class="rc-label">Error</div><div class="rc-value err" style="font-size:13px">${data.error}</div></div>`);
+    if (parts.length) cards = `<div class="result-summary">${parts.join('')}</div>`;
+  }
+  panel.innerHTML = `
+    <div class="response-header">
+      <span class="response-status ${sClass}">${status}</span>
+      <span style="font-family:var(--mono);font-size:12px;color:var(--text-dim)">${status < 300 ? 'OK' : status < 500 ? 'Client Error' : 'Server Error'}</span>
+      <span class="response-time">${elapsed}ms</span>
+    </div>
+    <div class="response-body">${cards}${highlightJSON(data)}</div>`;
+  panel.classList.add('show');
+}
+
+function addHistory(method, path, status, elapsed) {
+  history.unshift({ method, path, status, elapsed, time: new Date().toLocaleTimeString() });
+  const list = $('#historyList');
+  list.innerHTML = history.map(h => `
+    <div class="history-item">
+      <span class="hi-method ${h.method.toLowerCase()}">${h.method}</span>
+      <span class="hi-path">${h.path}</span>
+      <span class="hi-status ${h.status < 400 ? 'ok' : 'err'}">${h.status}</span>
+      <span class="hi-time">${h.elapsed}ms · ${h.time}</span>
+    </div>`).join('');
+}
+
+// ─── API calls ──────────────────────────────────────────
+async function checkHealth() { await sendHealth(); }
+
+async function sendHealth() {
+  const spin = $('#spin-health');
+  spin.classList.add('show');
+  const t0 = performance.now();
+  try {
+    const resp = await fetch(`${baseUrl()}/health`);
+    const data = await resp.json();
+    const elapsed = Math.round(performance.now() - t0);
+    renderResponse('resp-health', resp.status, data, elapsed);
+    addHistory('GET', '/health', resp.status, elapsed);
+    $('#statusDot').className = 'status-dot ok';
+    $('#statusLabel').textContent = 'Connected';
+  } catch (e) {
+    const elapsed = Math.round(performance.now() - t0);
+    renderResponse('resp-health', 0, { error: e.message }, elapsed);
+    addHistory('GET', '/health', 0, elapsed);
+    $('#statusDot').className = 'status-dot err';
+    $('#statusLabel').textContent = 'Disconnected';
+  }
+  spin.classList.remove('show');
+}
+
+async function sendUpload() {
+  if (!selectedFile) return;
+  const spin = $('#spin-upload');
+  spin.classList.add('show');
+  $('#btnUpload').disabled = true;
+
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+  fd.append('document_type', $('#uploadDocType').value);
+  if ($('#uploadOutputKey').value) fd.append('output_s3_key', $('#uploadOutputKey').value);
+
+  const t0 = performance.now();
+  try {
+    const resp = await fetch(`${baseUrl()}/convert/upload`, { method: 'POST', body: fd });
+    const data = await resp.json();
+    const elapsed = Math.round(performance.now() - t0);
+    renderResponse('resp-upload', resp.status, data, elapsed);
+    addHistory('POST', '/convert/upload', resp.status, elapsed);
+  } catch (e) {
+    const elapsed = Math.round(performance.now() - t0);
+    renderResponse('resp-upload', 0, { error: e.message }, elapsed);
+    addHistory('POST', '/convert/upload', 0, elapsed);
+  }
+  spin.classList.remove('show');
+  $('#btnUpload').disabled = false;
+}
+
+async function sendJob() {
+  buildJobPreview();
+  const body = $('#jobPreview').value;
+  const spin = $('#spin-job');
+  spin.classList.add('show');
+
+  const t0 = performance.now();
+  try {
+    const resp = await fetch(`${baseUrl()}/convert/job`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: body,
+    });
+    const data = await resp.json();
+    const elapsed = Math.round(performance.now() - t0);
+    renderResponse('resp-job', resp.status, data, elapsed);
+    addHistory('POST', '/convert/job', resp.status, elapsed);
+  } catch (e) {
+    const elapsed = Math.round(performance.now() - t0);
+    renderResponse('resp-job', 0, { error: e.message }, elapsed);
+    addHistory('POST', '/convert/job', 0, elapsed);
+  }
+  spin.classList.remove('show');
+}
+
+// ─── Init ───────────────────────────────────────────────
+const SCHEMA = {
+  job_id: "optional-caller-id",
+  document_type: "pdf | docx | xlsx | pptx | html | rtf | odt | txt | csv | image",
+  location_type: "s3 | url | ftp",
+  s3_bucket: "my-bucket         (when location_type = s3)",
+  s3_key: "path/to/file.pdf  (when location_type = s3)",
+  s3_endpoint_url: "http://...        (optional S3 override)",
+  url: "https://...       (when location_type = url)",
+  ftp_host: "ftp.example.com   (when location_type = ftp)",
+  ftp_port: 21,
+  ftp_path: "/path/to/file     (when location_type = ftp)",
+  ftp_user: "username          (optional)",
+  ftp_pass: "password          (optional)",
+  auth_type: "none | basic | bearer | aws_sigv4",
+  auth_username: "user              (when auth_type = basic)",
+  auth_password: "pass              (when auth_type = basic)",
+  auth_token: "token             (when auth_type = bearer)",
+  output_s3_bucket: "override-bucket   (optional)",
+  output_s3_key: "custom/key.txt    (optional)"
+};
+$('#schemaBlock').innerHTML = highlightJSON(SCHEMA);
+updateJobFields();
+buildJobPreview();
+setTimeout(checkHealth, 500);
+</script>
+</body>
+</html>

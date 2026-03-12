@@ -2,19 +2,23 @@
 REST API for the document conversion service.
 
 Endpoints:
-  POST /convert/job       – submit a ConversionJob (fetch from remote source)
-  POST /convert/upload    – upload a file directly for conversion
-  GET  /health            – liveness check
+  GET  /               – API Test Console (HTML UI)
+  GET  /health         – liveness check
+  POST /convert/job    – submit a ConversionJob (fetch from remote source)
+  POST /convert/upload – upload a file directly for conversion
 """
 
 import logging
 import os
 import tempfile
 import uuid
+from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 
 from config.settings import settings
 from app.models import ConversionJob, ConversionResult, DocumentType, LocationType
@@ -28,6 +32,29 @@ app = FastAPI(
     description="Convert documents and images to plain text, stored on S3.",
 )
 
+# ── CORS (allow the test console and external callers) ───────────────────────
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ── Static files (test console) ─────────────────────────────────────────────
+_static_dir = Path(__file__).parent / "static"
+if _static_dir.is_dir():
+    app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
+
+
+# ── Root → test console ─────────────────────────────────────────────────────
+
+@app.get("/", include_in_schema=False)
+async def root():
+    index = _static_dir / "index.html"
+    if index.exists():
+        return FileResponse(str(index), media_type="text/html")
+    return {"message": "Document Conversion Service", "docs": "/docs"}
+
 
 # ── Health check ─────────────────────────────────────────────────────────────
 
@@ -39,7 +66,107 @@ async def health():
         "sqs_enabled": settings.enable_sqs,
         "rabbitmq_enabled": settings.enable_rabbitmq,
         "kafka_enabled": settings.enable_kafka,
+        "temporal_enabled": settings.enable_temporal,
+        "temporal_workflows_active": settings.use_temporal_workflows,
+        "temporal_host": settings.temporal_host if settings.enable_temporal else None,
+        "temporal_task_queue": settings.temporal_task_queue if settings.enable_temporal else None,
     }
+
+
+# ── Temporal workflow status ─────────────────────────────────────────────────
+
+@app.get("/workflow/{workflow_id}/status")
+async def get_workflow_status(workflow_id: str):
+    """
+    Query the current status of a Temporal workflow by ID.
+    Returns the workflow status and current processing step.
+    """
+    if not settings.enable_temporal:
+        raise HTTPException(400, "Temporal is not enabled")
+
+    try:
+        from temporalio.client import Client
+        client = await Client.connect(
+            settings.temporal_host,
+            namespace=settings.temporal_namespace,
+        )
+        handle = client.get_workflow_handle(workflow_id)
+        desc = await handle.describe()
+
+        # Query custom state
+        status_val = None
+        step_val = None
+        try:
+            status_val = await handle.query("get_status")
+        except Exception:
+            pass
+        try:
+            step_val = await handle.query("get_step")
+        except Exception:
+            pass
+
+        return {
+            "workflow_id": workflow_id,
+            "run_id": desc.run_id,
+            "status": desc.status.name if desc.status else "UNKNOWN",
+            "custom_status": status_val,
+            "current_step": step_val,
+            "start_time": str(desc.start_time) if desc.start_time else None,
+            "close_time": str(desc.close_time) if desc.close_time else None,
+            "task_queue": desc.task_queue,
+        }
+    except Exception as exc:
+        raise HTTPException(404, f"Workflow not found or query failed: {exc}")
+
+
+@app.post("/workflow/{workflow_id}/cancel")
+async def cancel_workflow(workflow_id: str):
+    """Send a cancellation signal to a running Temporal workflow."""
+    if not settings.enable_temporal:
+        raise HTTPException(400, "Temporal is not enabled")
+
+    try:
+        from temporalio.client import Client
+        client = await Client.connect(
+            settings.temporal_host,
+            namespace=settings.temporal_namespace,
+        )
+        handle = client.get_workflow_handle(workflow_id)
+        await handle.signal("cancel")
+        return {"workflow_id": workflow_id, "message": "Cancellation signal sent"}
+    except Exception as exc:
+        raise HTTPException(404, f"Failed to cancel workflow: {exc}")
+
+
+@app.get("/workflows/recent")
+async def list_recent_workflows(limit: int = 20):
+    """List recent document conversion workflows from Temporal."""
+    if not settings.enable_temporal:
+        raise HTTPException(400, "Temporal is not enabled")
+
+    try:
+        from temporalio.client import Client
+        client = await Client.connect(
+            settings.temporal_host,
+            namespace=settings.temporal_namespace,
+        )
+        workflows = []
+        async for wf in client.list_workflows(
+            query=f'TaskQueue="{settings.temporal_task_queue}"',
+        ):
+            workflows.append({
+                "id": wf.id,
+                "run_id": wf.run_id,
+                "status": wf.status.name if wf.status else "UNKNOWN",
+                "workflow_type": wf.workflow_type,
+                "start_time": str(wf.start_time) if wf.start_time else None,
+                "close_time": str(wf.close_time) if wf.close_time else None,
+            })
+            if len(workflows) >= limit:
+                break
+        return {"workflows": workflows, "count": len(workflows)}
+    except Exception as exc:
+        raise HTTPException(500, f"Failed to list workflows: {exc}")
 
 
 # ── Submit a job (remote source) ────────────────────────────────────────────

@@ -42,6 +42,8 @@ def _banner():
         "SQS":      settings.enable_sqs,
         "RabbitMQ": settings.enable_rabbitmq,
         "Kafka":    settings.enable_kafka,
+        "Temporal": settings.enable_temporal,
+        "→ Workflows": settings.use_temporal_workflows,
     }
     logger.info("=" * 60)
     logger.info("  Document Conversion Service")
@@ -81,6 +83,11 @@ def main():
     if settings.enable_kafka:
         from app.bus.kafka_listener import run_kafka_listener
         threads.append(_start_thread("kafka-listener", run_kafka_listener))
+
+    # ── Temporal Worker ──────────────────────────────────────────────────
+    if settings.enable_temporal:
+        from app.workflows.worker import run_temporal_worker
+        threads.append(_start_thread("temporal-worker", run_temporal_worker))
 
     # ── REST API (runs on the main thread) ───────────────────────────────
     if settings.enable_api:

@@ -1,6 +1,6 @@
 ###############################################################################
 # Document Conversion Service – Docker Compose
-# Services: LocalStack (SQS + S3), RabbitMQ, Kafka + Zookeeper, App
+# Services: LocalStack (SQS+S3), RabbitMQ, Kafka+Zookeeper, Temporal, App
 ###############################################################################
 version: "3.9"
 
@@ -10,12 +10,13 @@ x-common-env: &common-env
   AWS_DEFAULT_REGION: us-east-1
 
 services:
-  # ─────────────────────────── Infrastructure ───────────────────────────
+  # ═════════════════════════ Infrastructure ══════════════════════════════════
+
   localstack:
     image: localstack/localstack:3.4
     container_name: docconv-localstack
     ports:
-      - "4566:4566"          # Gateway
+      - "4566:4566"
     environment:
       <<: *common-env
       SERVICES: sqs,s3
@@ -34,8 +35,8 @@ services:
     image: rabbitmq:3.13-management-alpine
     container_name: docconv-rabbitmq
     ports:
-      - "5672:5672"          # AMQP
-      - "15672:15672"        # Management UI
+      - "5672:5672"
+      - "15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: docconv
       RABBITMQ_DEFAULT_PASS: docconv
@@ -81,7 +82,6 @@ services:
       timeout: 10s
       retries: 10
 
-  # ────────────────────── FTP Server (for demo) ─────────────────────────
   ftp:
     image: fauria/vsftpd:latest
     container_name: docconv-ftp
@@ -97,14 +97,80 @@ services:
     volumes:
       - ftp_data:/home/vsftpd/docconv
 
-  # ──────────────────── Document Conversion App ─────────────────────────
+  # ═══════════════════════ Temporal.io Stack ═════════════════════════════════
+
+  temporal-postgresql:
+    image: postgres:16-alpine
+    container_name: docconv-temporal-db
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
+    volumes:
+      - temporal_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  temporal-server:
+    image: temporalio/auto-setup:1.24.2
+    container_name: docconv-temporal
+    ports:
+      - "7233:7233"          # gRPC frontend
+    depends_on:
+      temporal-postgresql:
+        condition: service_healthy
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=temporal-postgresql
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+      - TEMPORAL_ADDRESS=temporal-server:7233
+      - TEMPORAL_CLI_ADDRESS=temporal-server:7233
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 40s
+
+  temporal-admin-tools:
+    image: temporalio/admin-tools:1.24.2
+    container_name: docconv-temporal-admin
+    depends_on:
+      temporal-server:
+        condition: service_healthy
+    environment:
+      - TEMPORAL_ADDRESS=temporal-server:7233
+      - TEMPORAL_CLI_ADDRESS=temporal-server:7233
+    stdin_open: true
+    tty: true
+
+  temporal-ui:
+    image: temporalio/ui:2.26.2
+    container_name: docconv-temporal-ui
+    ports:
+      - "8088:8080"          # Temporal Web UI
+    depends_on:
+      temporal-server:
+        condition: service_healthy
+    environment:
+      - TEMPORAL_ADDRESS=temporal-server:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+
+  # ═══════════════════════ Application ══════════════════════════════════════
+
   docconv-app:
     build:
       context: .
       dockerfile: Dockerfile
     container_name: docconv-app
     ports:
-      - "8080:8080"          # REST API
+      - "8080:8080"
     depends_on:
       localstack:
         condition: service_healthy
@@ -112,13 +178,17 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+      temporal-server:
+        condition: service_healthy
     environment:
       <<: *common-env
       # ── Feature flags ──
-      ENABLE_API: "true"                     # set "false" to disable HTTP API
+      ENABLE_API: "true"
       ENABLE_SQS: "true"
       ENABLE_RABBITMQ: "true"
       ENABLE_KAFKA: "true"
+      ENABLE_TEMPORAL: "true"
+      USE_TEMPORAL_WORKFLOWS: "true"       # route jobs through Temporal
       # ── Endpoints ──
       SQS_ENDPOINT_URL: http://localstack:4566
       SQS_QUEUE_NAME: docconv-jobs
@@ -133,8 +203,12 @@ services:
       KAFKA_TOPIC: docconv-jobs
       KAFKA_GROUP_ID: docconv-group
       FTP_HOST: ftp
+      # ── Temporal ──
+      TEMPORAL_HOST: temporal-server:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: docconv-tasks
       # ── Tuning ──
-      CHUNK_SIZE: "65536"                    # 64 KB read chunks
+      CHUNK_SIZE: "65536"
       TMP_DIR: /tmp/docconv
       LOG_LEVEL: INFO
     volumes:
@@ -146,3 +220,4 @@ volumes:
   rabbitmq_data:
   ftp_data:
   tmp_data:
+  temporal_db_data:

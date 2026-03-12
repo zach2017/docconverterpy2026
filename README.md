@@ -262,5 +262,3 @@ aws --endpoint-url=http://localhost:4566 s3 ls s3://docconv-output/converted/ --
 # Download and view
 aws --endpoint-url=http://localhost:4566 s3 cp s3://docconv-output/converted/demo-url-001.txt -
 ```
-"# docconverterpy" 
-"# docconverterpy" 
